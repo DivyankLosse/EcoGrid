@@ -185,7 +185,7 @@ with col_reward:
             fig4.update_layout(title=dict(text="Reward Breakdown", font=dict(color="#a0aec0", size=13)), height=200, margin=dict(l=10, r=10, t=30, b=10), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color="#e2e8f0")), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(gridcolor="#2d3748"), yaxis=dict(gridcolor="#2d3748"), font={'color': '#e2e8f0'})
             st.plotly_chart(fig4, use_container_width=True, config={'displayModeBar': False})
         else:
-            st.info("Press '▶ Step' or '⏭ Run Episode' in the sidebar to see performance charts.")
+            st.info("Press 'Step' or 'Run Episode' in the sidebar to see performance charts.", icon=None)
             for _ in range(12): st.empty() # padding to match height
 
 # Panel 3: Emissions & Training

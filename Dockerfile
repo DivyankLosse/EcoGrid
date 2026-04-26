@@ -10,6 +10,7 @@ COPY requirements.txt ./
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
 COPY . .
+RUN uv sync --frozen --no-dev --extra train
 
 EXPOSE 7860
 

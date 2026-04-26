@@ -1,288 +1,50 @@
 """
-EcoGrid-OpenEnv Streamlit Dashboard
+EcoGrid-OpenEnv — Streamlit Dashboard
 
-A professional control-room dashboard for visualizing the RL environment and
-comparing random, heuristic, and trained agents.
+A 3-panel interactive dashboard for visualizing the RL environment, 
+demonstrating the difference between random, heuristic, and trained agents.
+Designed for HuggingFace Spaces.
 """
 
+import streamlit as st
+import pandas as pd
+import plotly.graph_objects as go
 import json
 import os
 
-import pandas as pd
-import plotly.graph_objects as go
-import streamlit as st
-
-from baseline import heuristic_agent, load_trained_model, local_llm_agent
 from env.environment import EcoGridEnv
 from models.schemas import GridAction
+from baseline import heuristic_agent, local_llm_agent, load_trained_model
 
-
-st.set_page_config(page_title="EcoGrid OpenEnv", layout="wide")
-
-PRIMARY = "#27c3bd"
-ACCENT = "#6ea8fe"
-SUCCESS = "#45d483"
-WARNING = "#f6c85f"
-DANGER = "#f05252"
-PAPER = "rgba(0,0,0,0)"
-GRID = "rgba(148, 163, 184, 0.18)"
-TEXT = "#e6edf7"
-MUTED = "#9aa8bd"
-
-
-st.markdown(
-    """
-    <style>
-    :root {
-        --bg: #0b1220;
-        --panel: #141d2b;
-        --panel-soft: #192437;
-        --line: rgba(148, 163, 184, 0.18);
-        --text: #e6edf7;
-        --muted: #9aa8bd;
-        --primary: #27c3bd;
-        --accent: #6ea8fe;
-        --danger: #f05252;
-    }
-
-    .stApp {
-        background:
-            radial-gradient(circle at 24% 0%, rgba(39, 195, 189, 0.10), transparent 28rem),
-            linear-gradient(135deg, #09111f 0%, #101827 48%, #0b1220 100%);
-        color: var(--text);
-    }
-
-    .block-container {
-        max-width: 1540px;
-        padding: 2rem 2.2rem 2.6rem;
-    }
-
-    [data-testid="stSidebar"] {
-        background: #111a28;
-        border-right: 1px solid var(--line);
-    }
-
-    [data-testid="stSidebar"] .block-container,
-    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
-        gap: 1rem;
-    }
-
-    [data-testid="stSidebar"] h1 {
-        color: var(--text);
-        font-size: 1.25rem;
-        letter-spacing: 0;
-        margin-bottom: 0.25rem;
-    }
-
-    [data-testid="stSidebar"] label,
-    [data-testid="stSidebar"] p,
-    [data-testid="stSidebar"] span {
-        color: var(--text);
-    }
-
-    .hero {
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        background: linear-gradient(135deg, rgba(20, 29, 43, 0.96), rgba(17, 26, 40, 0.86));
-        padding: 1.25rem 1.4rem;
-        margin-bottom: 1rem;
-    }
-
-    .eyebrow {
-        color: var(--primary);
-        font-size: 0.76rem;
-        font-weight: 800;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        margin-bottom: 0.35rem;
-    }
-
-    .hero h1 {
-        color: var(--text);
-        font-size: clamp(1.9rem, 3vw, 3.1rem);
-        font-weight: 800;
-        letter-spacing: 0;
-        line-height: 1.05;
-        margin: 0;
-    }
-
-    .hero p {
-        color: var(--muted);
-        font-size: 1rem;
-        margin: 0.6rem 0 0;
-        max-width: 760px;
-    }
-
-    .kpi-card {
-        min-height: 104px;
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        background: rgba(20, 29, 43, 0.88);
-        padding: 1rem;
-    }
-
-    .kpi-label {
-        color: var(--muted);
-        font-size: 0.78rem;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-    }
-
-    .kpi-value {
-        color: var(--text);
-        font-size: 1.8rem;
-        font-weight: 800;
-        line-height: 1.1;
-        margin-top: 0.35rem;
-    }
-
-    .kpi-note {
-        color: var(--muted);
-        font-size: 0.82rem;
-        margin-top: 0.35rem;
-    }
-
-    div[data-testid="stVerticalBlockBorderWrapper"] {
-        border-color: var(--line);
-        border-radius: 8px;
-        background: rgba(20, 29, 43, 0.88);
-    }
-
-    div[data-testid="stVerticalBlockBorderWrapper"] > div {
-        padding: 1rem 1rem 0.85rem;
-    }
-
-    .panel-title {
-        color: var(--text);
-        display: flex;
-        align-items: baseline;
-        justify-content: space-between;
-        border-bottom: 1px solid var(--line);
-        padding-bottom: 0.75rem;
-        margin-bottom: 0.85rem;
-    }
-
-    .panel-title strong {
-        font-size: 1.02rem;
-    }
-
-    .panel-title span {
-        color: var(--muted);
-        font-size: 0.76rem;
-        font-weight: 700;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-    }
-
-    div[data-testid="stMetric"] {
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        background: rgba(25, 36, 55, 0.76);
-        padding: 0.85rem 1rem;
-    }
-
-    div[data-testid="stMetricLabel"] p {
-        color: var(--muted);
-        font-size: 0.8rem;
-        font-weight: 700;
-    }
-
-    div[data-testid="stMetricValue"] {
-        color: var(--primary);
-        font-size: 1.75rem !important;
-        font-weight: 800 !important;
-    }
-
-    .stButton > button {
-        width: 100%;
-        min-height: 2.7rem;
-        border: 1px solid rgba(39, 195, 189, 0.4);
-        border-radius: 8px;
-        background: #1faea9;
-        color: #06111f;
-        font-weight: 800;
-        letter-spacing: 0;
-        transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
-    }
-
-    .stButton > button:hover {
-        background: #39d2ca;
-        border-color: rgba(39, 195, 189, 0.9);
-        color: #06111f;
-        transform: translateY(-1px);
-    }
-
-    div[data-testid="stAlert"] {
-        border-radius: 8px;
-        border: 1px solid rgba(110, 168, 254, 0.26);
-        background: rgba(37, 83, 139, 0.28);
-        color: var(--text);
-    }
-
-    .section-spacer {
-        height: 0.65rem;
-    }
-
-    .footer {
-        border-top: 1px solid var(--line);
-        color: var(--muted);
-        font-size: 0.86rem;
-        margin-top: 2rem;
-        padding-top: 1rem;
-        text-align: center;
-    }
-
-    div[data-testid="stDecoration"] {
-        display: none;
-    }
-
-    @media (max-width: 900px) {
-        .block-container {
-            padding: 1.2rem 1rem 2rem;
-        }
-
-        .hero {
-            padding: 1rem;
-        }
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
+# Use wide mode
+st.set_page_config(page_title="EcoGrid RL Environment", layout="wide")
 
 @st.cache_resource
 def init_llm_model():
     """Load the LLM once into memory and cache it."""
     load_trained_model()
 
-
 init_llm_model()
-
 
 def load_reward_curve():
     try:
         if os.path.exists("./logs/reward_curve.json"):
-            with open("./logs/reward_curve.json", "r", encoding="utf-8") as f:
+            with open("./logs/reward_curve.json", "r") as f:
                 return json.load(f)
-    except (OSError, json.JSONDecodeError):
+    except:
         pass
     return []
 
-
 def random_agent(state) -> GridAction:
     import random
-
     ren = random.uniform(0, 0.8)
     foss = random.uniform(0, 1.0 - ren)
     bat = random.uniform(-1, 1)
     return GridAction(renewable_ratio=ren, fossil_ratio=foss, battery_action=bat)
 
-
 def trained_agent(state) -> GridAction:
+    # Uses the real LLM inference if LoRA is available!
     return local_llm_agent(state, st.session_state.current_task)
-
 
 def init_session():
     if "env" not in st.session_state:
@@ -291,37 +53,26 @@ def init_session():
         st.session_state.state = st.session_state.env.reset(task="medium", seed=42)
         st.session_state.history = []
         st.session_state.cumulative_reward = 0.0
-        st.session_state.last_action = None
-
-
-def reset_session(task):
-    st.session_state.current_task = task
-    st.session_state.env = EcoGridEnv()
-    st.session_state.state = st.session_state.env.reset(task=task, seed=42)
-    st.session_state.history = []
-    st.session_state.cumulative_reward = 0.0
-    st.session_state.last_action = None
-
 
 def step_env(agent_type):
     env = st.session_state.env
     state = st.session_state.state
-
+    
     if env.is_done:
         return
-
+        
     if agent_type == "Random":
         action = random_agent(state)
     elif agent_type == "Heuristic":
         action = heuristic_agent(state, st.session_state.current_task)
-    else:
+    else: # Trained
         action = trained_agent(state)
-
+        
     result = env.step(action)
     st.session_state.state = result.observation
     st.session_state.cumulative_reward += result.reward
-    st.session_state.last_action = action
-
+    
+    # Save history for plotting
     log_entry = {
         "step": env.current_step,
         "demand": state.demand,
@@ -329,264 +80,322 @@ def step_env(agent_type):
         "cost_score": result.info["reward_breakdown"]["cost_score"],
         "carbon_score": result.info["reward_breakdown"]["carbon_score"],
         "stability_score": result.info["reward_breakdown"]["stability_score"],
-        "emissions": result.info["carbon_emitted_step"],
+        "emissions": result.info["carbon_emitted_step"]
     }
     st.session_state.history.append(log_entry)
 
-
-def base_layout(height, title=None):
-    layout = dict(
-        height=height,
-        margin=dict(l=12, r=12, t=34 if title else 16, b=24),
-        paper_bgcolor=PAPER,
-        plot_bgcolor=PAPER,
-        font=dict(color=TEXT, family="Inter, Arial, sans-serif"),
-        xaxis=dict(gridcolor=GRID, zerolinecolor=GRID),
-        yaxis=dict(gridcolor=GRID, zerolinecolor=GRID),
-    )
-    if title:
-        layout["title"] = dict(text=title, font=dict(color=MUTED, size=13), x=0.02)
-    return layout
-
-
-def format_pct(value):
-    return f"{value * 100:.0f}%"
-
-
-def kpi(label, value, note):
-    st.markdown(
-        f"""
-        <div class="kpi-card">
-            <div class="kpi-label">{label}</div>
-            <div class="kpi-value">{value}</div>
-            <div class="kpi-note">{note}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
 init_session()
 
+# ── Sidebar ──
 with st.sidebar:
-    st.title("EcoGrid Controls")
-    st.caption("Configure and run the simulation episode.")
-
-    task = st.selectbox("Task difficulty", ["easy", "medium", "hard"], index=1)
+    st.title("⚡ EcoGrid Config")
+    
+    task = st.selectbox("Select Task Difficulty", ["easy", "medium", "hard"], index=1)
     if task != st.session_state.current_task:
-        reset_session(task)
+        st.session_state.current_task = task
+        st.session_state.env = EcoGridEnv()
+        st.session_state.state = st.session_state.env.reset(task=task, seed=42)
+        st.session_state.history = []
+        st.session_state.cumulative_reward = 0.0
+        
+    agent = st.radio("Select Agent", ["Random", "Heuristic", "Trained (LoRA)"], index=1)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("▶ Step"):
+            step_env(agent)
+    with col2:
+        if st.button("⏭ Run Episode"):
+            while not st.session_state.env.is_done:
+                step_env(agent)
+                
+    if st.button("🔄 Reset"):
+        st.session_state.env = EcoGridEnv()
+        st.session_state.state = st.session_state.env.reset(task=task, seed=42)
+        st.session_state.history = []
+        st.session_state.cumulative_reward = 0.0
 
-    agent = st.radio("Agent policy", ["Random", "Heuristic", "Trained (LoRA)"], index=1)
+    st.markdown("---")
+    st.markdown("**Agent policy:**")
+    policy_path = os.getenv("LORA_ADAPTER_DIR", "/app/lora_adapter")
+    if os.path.exists(os.path.join(policy_path, "adapter_config.json")):
+        try:
+            with open(os.path.join(policy_path, "adapter_config.json")) as f:
+                cfg = json.load(f)
+            base_model = cfg.get("base_model", "nomic-ai/nomic-embed-text-v1").split("/")[-1]
+            st.success(f"Loaded: {base_model}", icon="✅")
+            st.markdown(f"Policy: **{base_model} + LoRA**")
+        except Exception:
+            st.success("Loaded: custom LoRA")
+    else:
+        st.success("Loaded: default model")
+        
+    st.markdown("---")
+    
+    if "training_status" not in st.session_state:
+        st.session_state.training_status = "idle"
+    
+    if st.button("🚀 Train GRPO"):
+        st.session_state.training_status = "running"
+        def run_training_stub():
+            import subprocess, sys, os
+            subprocess.Popen([
+                sys.executable, "train_unsloth.py", 
+            ], cwd=os.getcwd())
+        import threading
+        t = threading.Thread(target=run_training_stub, daemon=True)
+        t.start()
+        st.session_state.training_status = "running"
+        st.rerun()
+        
+    if st.button("💾 Save Model"):
+        st.session_state.lora_adapter_path = "lora_adapter/best"
+        st.success("Model saved (simulated)")
+        
+    st.markdown("---")
+    if st.button("🔄 Auto-run"):
+        st.session_state.auto_run = not st.session_state.get("auto_run", False)
 
-    st.markdown('<div class="section-spacer"></div>', unsafe_allow_html=True)
-    if st.button("Step"):
-        step_env(agent)
-
-    if st.button("Run Episode"):
+# Auto-run loop execution
+if st.session_state.get("auto_run", False):
+    import time
+    if "last_run" not in st.session_state:
+        st.session_state.last_run = 0
+    if time.time() - st.session_state.last_run > 1:
         while not st.session_state.env.is_done:
             step_env(agent)
+        st.session_state.last_run = time.time()
+        st.rerun()
 
-    if st.button("Reset"):
-        reset_session(task)
+# ── Main UI ──
+st.markdown("""
+<div class="main-header">
+    <h1>🌍 EcoGrid <span class="highlight">OpenEnv</span></h1>
+    <p>Production-Grade RL Environment for Sustainable Energy Grid Management</p>
+</div>
+""", unsafe_allow_html=True)
 
-    st.markdown('<div class="section-spacer"></div>', unsafe_allow_html=True)
-    config = st.session_state.env.get_task_config(st.session_state.current_task)
-    st.caption(config["description"])
+col_live, col_reward, col_emissions = st.columns(3)
 
-state = st.session_state.state
-config = st.session_state.env.get_task_config(st.session_state.current_task)
-episode_length = config["episode_length"]
-progress = state.time_step / episode_length if episode_length else 0
-history = st.session_state.history
-avg_reward = (
-    sum(row["reward"] for row in history) / len(history)
-    if history
-    else 0.0
-)
-total_emissions = sum(row["emissions"] for row in history) if history else 0.0
-budget_used = max(config["carbon_budget"] - state.carbon_budget_remaining, 0.0)
-budget_ratio = (
-    state.carbon_budget_remaining / config["carbon_budget"]
-    if config["carbon_budget"]
-    else 0.0
-)
-
-st.markdown(
-    """
-    <div class="hero">
-        <div class="eyebrow">Sustainable grid reinforcement learning</div>
-        <h1>EcoGrid OpenEnv</h1>
-        <p>Monitor agent decisions, grid health, carbon budget, and reward quality across a live simulation episode.</p>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
-k1, k2, k3, k4 = st.columns(4)
-with k1:
-    kpi("Episode Progress", f"{state.time_step} / {episode_length}", f"{progress * 100:.0f}% complete")
-with k2:
-    kpi("Average Reward", f"{avg_reward:.3f}", f"Cumulative {st.session_state.cumulative_reward:.2f}")
-with k3:
-    kpi("Grid Stability", format_pct(state.grid_stability), f"Battery {format_pct(state.battery_level)}")
-with k4:
-    kpi("Carbon Remaining", f"{state.carbon_budget_remaining:.0f}", f"{total_emissions:.1f} kgCO2 emitted")
-
-st.markdown('<div class="section-spacer"></div>', unsafe_allow_html=True)
-col_live, col_reward, col_emissions = st.columns([1, 1, 1])
-
+# Panel 1: Live Grid State
 with col_live:
     with st.container(border=True):
-        st.markdown(
-            '<div class="panel-title"><strong>Live Grid State</strong><span>Telemetry</span></div>',
-            unsafe_allow_html=True,
-        )
-        m1, m2 = st.columns(2)
-        with m1:
-            st.metric("Demand", f"{state.demand:.1f} MWh")
-        with m2:
-            st.metric("Spot Price", f"${state.price_signal:.0f}/MWh")
+        st.markdown('<div class="panel-title">📡 Live Grid State</div>', unsafe_allow_html=True)
+        state = st.session_state.state
+        
+        st.metric("Timestep", f"{state.time_step} / {st.session_state.env.get_task_config(st.session_state.current_task)['episode_length']}")
+        
+        # Battery Gauge
+        fig = go.Figure(go.Indicator(
+            mode = "gauge+number",
+            value = state.battery_level * 100,
+            title = {'text': "Battery Level (%)", 'font': {'size': 13, 'color': '#a0aec0'}},
+            gauge = {
+                'axis': {'range': [0, 100], 'tickwidth': 1, 'tickcolor': "#4a5568"},
+                'bar': {'color': "#38b2ac"},
+                'bgcolor': "rgba(0,0,0,0)",
+                'borderwidth': 0,
+                'steps': [
+                    {'range': [0, 20], 'color': 'rgba(229, 62, 62, 0.2)'},
+                    {'range': [20, 80], 'color': 'rgba(56, 178, 172, 0.1)'},
+                    {'range': [80, 100], 'color': 'rgba(72, 187, 120, 0.2)'}
+                ]
+            }
+        ))
+        fig.update_layout(height=180, margin=dict(l=20, r=20, t=30, b=10), paper_bgcolor="rgba(0,0,0,0)", font={'color': '#e2e8f0'})
+        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+        
+        # Capacity Bars
+        fig2 = go.Figure(data=[
+            go.Bar(name='Demand', x=['Demand'], y=[state.demand], marker_color='#e53e3e', marker_line_width=0, opacity=0.9),
+            go.Bar(name='Solar', x=['Solar'], y=[state.solar_capacity * 100], marker_color='#ecc94b', marker_line_width=0, opacity=0.9),
+            go.Bar(name='Wind', x=['Wind'], y=[state.wind_capacity * 100], marker_color='#4299e1', marker_line_width=0, opacity=0.9)
+        ])
+        fig2.update_layout(height=200, margin=dict(l=10, r=10, t=10, b=20), barmode='group', showlegend=False, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", yaxis=dict(gridcolor="#2d3748"))
+        st.plotly_chart(fig2, use_container_width=True, config={'displayModeBar': False})
 
-        fig = go.Figure(
-            go.Indicator(
-                mode="gauge+number",
-                value=state.battery_level * 100,
-                number={"suffix": "%", "font": {"color": TEXT, "size": 42}},
-                title={"text": "Battery charge", "font": {"size": 13, "color": MUTED}},
-                gauge={
-                    "axis": {"range": [0, 100], "tickwidth": 1, "tickcolor": GRID},
-                    "bar": {"color": PRIMARY, "thickness": 0.22},
-                    "bgcolor": "rgba(0,0,0,0)",
-                    "borderwidth": 0,
-                    "steps": [
-                        {"range": [0, 20], "color": "rgba(240, 82, 82, 0.24)"},
-                        {"range": [20, 80], "color": "rgba(39, 195, 189, 0.12)"},
-                        {"range": [80, 100], "color": "rgba(69, 212, 131, 0.18)"},
-                    ],
-                },
-            )
-        )
-        fig.update_layout(**base_layout(190))
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
-        fig2 = go.Figure(
-            data=[
-                go.Bar(name="Demand", x=["Demand"], y=[state.demand], marker_color=DANGER),
-                go.Bar(name="Solar", x=["Solar"], y=[state.solar_capacity * 100], marker_color=WARNING),
-                go.Bar(name="Wind", x=["Wind"], y=[state.wind_capacity * 100], marker_color=ACCENT),
-            ]
-        )
-        fig2.update_layout(**base_layout(210, "Demand and renewable capacity"))
-        fig2.update_layout(barmode="group", showlegend=False, yaxis_title="MWh / capacity %")
-        st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False})
-
+# Panel 2: Reward Over Time
 with col_reward:
     with st.container(border=True):
-        st.markdown(
-            '<div class="panel-title"><strong>Agent Performance</strong><span>Reward</span></div>',
-            unsafe_allow_html=True,
-        )
-
-        if history:
-            df = pd.DataFrame(history)
-
+        st.markdown('<div class="panel-title">📈 Agent Performance</div>', unsafe_allow_html=True)
+        
+        if st.session_state.history:
+            df = pd.DataFrame(st.session_state.history)
+            
+            # Current Episode Reward
             fig3 = go.Figure()
-            fig3.add_trace(
-                go.Scatter(
-                    x=df["step"],
-                    y=df["reward"],
-                    mode="lines",
-                    fill="tozeroy",
-                    name="Reward",
-                    line=dict(color=PRIMARY, width=3),
-                    fillcolor="rgba(39, 195, 189, 0.18)",
-                )
-            )
-            fig3.update_layout(**base_layout(210, "Step reward"))
-            fig3.update_layout(yaxis_range=[0, 1], xaxis_title="Step", yaxis_title="Reward")
-            st.plotly_chart(fig3, use_container_width=True, config={"displayModeBar": False})
-
+            fig3.add_trace(go.Scatter(x=df['step'], y=df['reward'], mode='lines', fill='tozeroy', name='Reward', line=dict(color='#9f7aea', width=3), fillcolor='rgba(159, 122, 234, 0.2)'))
+            fig3.update_layout(title=dict(text="Step Reward", font=dict(color="#a0aec0", size=13)), height=180, margin=dict(l=10, r=10, t=30, b=10), xaxis_title="Step", yaxis_title="Reward (0-1)", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(gridcolor="#2d3748"), yaxis=dict(gridcolor="#2d3748"), font={'color': '#e2e8f0'})
+            st.plotly_chart(fig3, use_container_width=True, config={'displayModeBar': False})
+            
+            # Breakdown
             fig4 = go.Figure()
-            fig4.add_trace(go.Scatter(x=df["step"], y=df["cost_score"], name="Cost", line=dict(color=WARNING, width=2)))
-            fig4.add_trace(go.Scatter(x=df["step"], y=df["carbon_score"], name="Carbon", line=dict(color=SUCCESS, width=2)))
-            fig4.add_trace(go.Scatter(x=df["step"], y=df["stability_score"], name="Stability", line=dict(color=ACCENT, width=2)))
-            fig4.update_layout(**base_layout(220, "Reward breakdown"))
-            fig4.update_layout(
-                yaxis_range=[0, 1],
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-            )
-            st.plotly_chart(fig4, use_container_width=True, config={"displayModeBar": False})
+            fig4.add_trace(go.Scatter(x=df['step'], y=df['cost_score'], name='Cost', line=dict(dash='dot', color='#f6e05e', width=2)))
+            fig4.add_trace(go.Scatter(x=df['step'], y=df['carbon_score'], name='Carbon', line=dict(dash='dash', color='#68d391', width=2)))
+            fig4.add_trace(go.Scatter(x=df['step'], y=df['stability_score'], name='Stability', line=dict(color='#63b3ed', width=2)))
+            fig4.update_layout(title=dict(text="Reward Breakdown", font=dict(color="#a0aec0", size=13)), height=200, margin=dict(l=10, r=10, t=30, b=10), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color="#e2e8f0")), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(gridcolor="#2d3748"), yaxis=dict(gridcolor="#2d3748"), font={'color': '#e2e8f0'})
+            st.plotly_chart(fig4, use_container_width=True, config={'displayModeBar': False})
         else:
-            st.info("Press Step or Run Episode in the sidebar to populate performance charts.", icon=None)
-            fig_empty = go.Figure()
-            fig_empty.add_annotation(
-                text="No episode data yet",
-                x=0.5,
-                y=0.5,
-                xref="paper",
-                yref="paper",
-                showarrow=False,
-                font=dict(color=MUTED, size=18),
-            )
-            fig_empty.update_layout(**base_layout(430))
-            fig_empty.update_xaxes(visible=False)
-            fig_empty.update_yaxes(visible=False)
-            st.plotly_chart(fig_empty, use_container_width=True, config={"displayModeBar": False})
+            st.info("Press 'Step' or 'Run Episode' in the sidebar to see performance charts.", icon=None)
+            for _ in range(12): st.empty() # padding to match height
 
+# Panel 3: Emissions & Training
 with col_emissions:
     with st.container(border=True):
-        st.markdown(
-            '<div class="panel-title"><strong>Emissions and Training</strong><span>Carbon</span></div>',
-            unsafe_allow_html=True,
-        )
-
-        fig5 = go.Figure(
-            go.Indicator(
-                mode="gauge+number",
-                value=state.carbon_budget_remaining,
-                number={"valueformat": ".0f", "font": {"color": TEXT, "size": 42}},
-                title={"text": "Carbon budget remaining", "font": {"size": 13, "color": MUTED}},
-                gauge={
-                    "axis": {"range": [0, config["carbon_budget"]], "tickwidth": 1, "tickcolor": GRID},
-                    "bar": {"color": SUCCESS if budget_ratio > 0.2 else DANGER, "thickness": 0.22},
-                    "bgcolor": "rgba(0,0,0,0)",
-                    "borderwidth": 0,
-                    "steps": [
-                        {"range": [0, config["carbon_budget"] * 0.2], "color": "rgba(240, 82, 82, 0.24)"},
-                        {
-                            "range": [config["carbon_budget"] * 0.2, config["carbon_budget"]],
-                            "color": "rgba(69, 212, 131, 0.12)",
-                        },
-                    ],
-                },
-            )
-        )
-        fig5.update_layout(**base_layout(210))
-        st.plotly_chart(fig5, use_container_width=True, config={"displayModeBar": False})
-
-        e1, e2 = st.columns(2)
-        with e1:
-            st.metric("Budget Used", f"{budget_used:.1f} kg")
-        with e2:
-            st.metric("Mode", st.session_state.current_task.title())
-
+        st.markdown('<div class="panel-title">🌍 Emissions & Training</div>', unsafe_allow_html=True)
+        
+        # Carbon Budget Gauge
+        max_budget = st.session_state.env.get_task_config(st.session_state.current_task)['carbon_budget']
+        current_budget = state.carbon_budget_remaining
+        
+        fig5 = go.Figure(go.Indicator(
+            mode = "gauge+number",
+            value = current_budget,
+            title = {'text': "Carbon Budget (kgCO2)", 'font': {'size': 13, 'color': '#a0aec0'}},
+            number = {'valueformat': ".0f", 'font': {'color': '#e2e8f0'}},
+            gauge = {
+                'axis': {'range': [0, max_budget], 'tickwidth': 1, 'tickcolor': "#4a5568"},
+                'bar': {'color': "#48bb78" if current_budget > max_budget * 0.2 else "#e53e3e"},
+                'bgcolor': "rgba(0,0,0,0)",
+                'borderwidth': 0,
+                'steps': [
+                    {'range': [0, max_budget * 0.2], 'color': "rgba(229, 62, 62, 0.2)"}
+                ]
+            }
+        ))
+        fig5.update_layout(height=180, margin=dict(l=20, r=20, t=30, b=10), paper_bgcolor="rgba(0,0,0,0)", font={'color': '#e2e8f0'})
+        st.plotly_chart(fig5, use_container_width=True, config={'displayModeBar': False})
+        
+        # RL Training Curve
+        st.markdown("<div style='font-size: 13px; color: #a0aec0; margin-top: 10px; margin-bottom: -10px;'>🧠 GRPO Training Progress (Unsloth)</div>", unsafe_allow_html=True)
         curve_data = load_reward_curve()
         if curve_data:
             df_curve = pd.DataFrame(curve_data)
             fig6 = go.Figure()
-            fig6.add_trace(
-                go.Scatter(
-                    x=df_curve["step"],
-                    y=df_curve["reward"],
-                    mode="lines",
-                    line=dict(color=PRIMARY, width=3),
-                )
-            )
-            fig6.update_layout(**base_layout(200, "Training reward curve"))
-            fig6.update_layout(xaxis_title="Training steps", yaxis_title="Average reward")
-            st.plotly_chart(fig6, use_container_width=True, config={"displayModeBar": False})
+            fig6.add_trace(go.Scatter(x=df_curve['step'], y=df_curve['reward'], mode='lines', line=dict(color='#38b2ac', width=3)))
+            fig6.update_layout(height=180, margin=dict(l=10, r=10, t=10, b=20), xaxis_title="Training Steps", yaxis_title="Avg Reward", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(gridcolor="#2d3748"), yaxis=dict(gridcolor="#2d3748"), font={'color': '#e2e8f0'})
+            st.plotly_chart(fig6, use_container_width=True, config={'displayModeBar': False})
         else:
-            st.caption("Training reward curve")
-            st.image("docs/reward_curve.png", caption="Submitted GRPO reward curve", use_column_width=True)
+            st.image("docs/reward_curve.png", caption="GRPO reward curve from the submitted training run")
 
-st.markdown('<div class="footer">EcoGrid OpenEnv - Hackathon finale submission</div>', unsafe_allow_html=True)
+st.markdown("""
+<div class="footer">
+    EcoGrid OpenEnv — Hackathon Finale Submission
+</div>
+""", unsafe_allow_html=True)
+
+# Global styling tweaks for clean padding and professional glassmorphism look
+st.markdown("""
+    <style>
+    /* Main Background & Fonts */
+    .stApp {
+        background: linear-gradient(135deg, #0f172a 0%, #1a202c 100%);
+        color: #e2e8f0;
+        font-family: 'Inter', sans-serif;
+    }
+    
+    /* Header Styling */
+    .main-header {
+        background: rgba(255, 255, 255, 0.03);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 12px;
+        padding: 1.5rem 2rem;
+        margin-bottom: 2rem;
+        text-align: center;
+    }
+    .main-header h1 {
+        margin: 0;
+        font-size: 2.5rem;
+        font-weight: 800;
+        background: linear-gradient(90deg, #38b2ac, #4299e1);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+    .main-header .highlight {
+        color: #e2e8f0;
+        -webkit-text-fill-color: #e2e8f0;
+    }
+    .main-header p {
+        margin: 0.5rem 0 0 0;
+        color: #a0aec0;
+        font-size: 1.1rem;
+    }
+    
+    /* Panel Containers (Glassmorphism) */
+    [data-testid="stVerticalBlock"] > [style*="flex-direction: column;"] > [data-testid="stVerticalBlock"] {
+        background: rgba(26, 32, 44, 0.6) !important;
+        backdrop-filter: blur(12px) !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        border-radius: 16px !important;
+        padding: 1.5rem !important;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    [data-testid="stVerticalBlock"] > [style*="flex-direction: column;"] > [data-testid="stVerticalBlock"]:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2) !important;
+    }
+
+    /* Panel Titles */
+    .panel-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #e2e8f0;
+        margin-bottom: 1rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        padding-bottom: 0.5rem;
+    }
+    
+    /* Metrics */
+    div[data-testid="stMetric"] {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        padding: 15px 20px;
+        border-radius: 12px;
+        box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+    }
+    div[data-testid="stMetricValue"] {
+        font-size: 1.8rem !important;
+        font-weight: 700 !important;
+        color: #38b2ac !important;
+    }
+    
+    /* Sidebar */
+    [data-testid="stSidebar"] {
+        background-color: #1a202c !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .stButton>button {
+        background: linear-gradient(135deg, #38b2ac 0%, #319795 100%);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-weight: 600;
+        padding: 0.5rem 1rem;
+        transition: all 0.2s;
+    }
+    .stButton>button:hover {
+        background: linear-gradient(135deg, #4fd1c5 0%, #38b2ac 100%);
+        box-shadow: 0 4px 12px rgba(56, 178, 172, 0.3);
+        transform: translateY(-1px);
+    }
+    
+    /* Hide Decorations */
+    div[data-testid="stDecoration"] {
+        display: none;
+    }
+    
+    /* Footer */
+    .footer {
+        text-align: center;
+        padding: 2rem 0;
+        color: #718096;
+        font-size: 0.9rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.05);
+        margin-top: 3rem;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
